@@ -5,32 +5,19 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 
-// ═══════════════════════════════════════════════════════════════
-//  createApp(options)
-//  - appDir:  carpeta con archivos de la app (public/, schema.sql)
-//  - dataDir: carpeta para datos persistentes (DB, uploads)
-//  Devuelve { start(port) } → Promise<{ port, server }>
-// ═══════════════════════════════════════════════════════════════
-
 function createApp(options = {}) {
     const appDir  = options.appDir  || __dirname;
     const dataDir = options.dataDir || __dirname;
 
-    // ── Rutas ──────────────────────────────────────────────────
-    // Solo lectura (dentro de la app empaquetada)
     const publicDir  = path.join(appDir, 'public');
     const schemaPath = path.join(appDir, 'database', 'schema.sql');
-
-    // Escritura (en carpeta del usuario)
     const uploadsDir = path.join(dataDir, 'uploads');
     const dbDir      = path.join(dataDir, 'database');
     const dbPath     = path.join(dbDir, 'finanzas.db');
 
-    // Crear directorios de datos si no existen
     if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
     if (!fs.existsSync(dbDir))      fs.mkdirSync(dbDir, { recursive: true });
 
-    // ── Base de datos ──────────────────────────────────────────
     let db;
 
     async function initDatabase() {
@@ -45,6 +32,41 @@ function createApp(options = {}) {
 
         const schema = fs.readFileSync(schemaPath, 'utf-8');
         db.run(schema);
+
+        // Migración: Agregar nuevas columnas a transactions si no existen
+        const tableInfo = queryAll("PRAGMA table_info(transactions)");
+        const columns = tableInfo.map(c => c.name);
+        
+        if (!columns.includes('billetera_origen_id')) {
+            db.run("ALTER TABLE transactions ADD COLUMN billetera_origen_id INTEGER REFERENCES billeteras(id)");
+            db.run("ALTER TABLE transactions ADD COLUMN billetera_destino_id INTEGER REFERENCES billeteras(id)");
+            db.run("ALTER TABLE transactions ADD COLUMN proposito_id INTEGER REFERENCES propositos(id)");
+            
+            // Asignar transacciones antiguas tipo "ahorro" al Ahorro General (id 1)
+            db.run("UPDATE transactions SET proposito_id = 1 WHERE type = 'ahorro'");
+        }
+
+        // Inyectar billeteras por defecto
+        const billeterasCount = queryOne("SELECT COUNT(*) as c FROM billeteras").c;
+        if (billeterasCount === 0) {
+            const defaultWallets = [
+                { nombre: 'Efectivo', color: '#10B981' }, 
+                { nombre: 'Banco Nacional', color: '#3B82F6' },
+                { nombre: 'Binance', color: '#F59E0B' }, 
+                { nombre: 'Zinli', color: '#EC4899' }, 
+                { nombre: 'PayPal', color: '#003087' } 
+            ];
+            const stmt = db.prepare("INSERT INTO billeteras (nombre, color) VALUES (?, ?)");
+            defaultWallets.forEach(w => stmt.run([w.nombre, w.color]));
+            stmt.free();
+        }
+
+        // Inyectar propósito general por defecto
+        const propositosCount = queryOne("SELECT COUNT(*) as c FROM propositos").c;
+        if (propositosCount === 0) {
+            db.run("INSERT INTO propositos (nombre, monto_objetivo, color) VALUES ('Ahorro General', 9999999, '#8B5CF6')");
+        }
+
         saveDatabase();
     }
 
@@ -54,16 +76,13 @@ function createApp(options = {}) {
         fs.writeFileSync(dbPath, buffer);
     }
 
-    // ── Express App ────────────────────────────────────────────
     const app = express();
-
     app.use(cors());
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
     app.use(express.static(publicDir));
     app.use('/uploads', express.static(uploadsDir));
 
-    // ── Multer ─────────────────────────────────────────────────
     const storage = multer.diskStorage({
         destination: (req, file, cb) => cb(null, uploadsDir),
         filename: (req, file, cb) => {
@@ -73,22 +92,8 @@ function createApp(options = {}) {
         }
     });
 
-    const fileFilter = (req, file, cb) => {
-        const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
-        if (allowedTypes.includes(file.mimetype)) {
-            cb(null, true);
-        } else {
-            cb(new Error('Tipo de archivo no permitido. Solo se aceptan imágenes (JPEG, PNG, GIF, WebP) y PDF.'), false);
-        }
-    };
+    const upload = multer({ storage });
 
-    const upload = multer({
-        storage,
-        fileFilter,
-        limits: { fileSize: 10 * 1024 * 1024 }
-    });
-
-    // ── Helpers DB ─────────────────────────────────────────────
     function queryAll(sql, params = []) {
         const stmt = db.prepare(sql);
         if (params.length > 0) stmt.bind(params);
@@ -109,99 +114,150 @@ function createApp(options = {}) {
         return { lastId: db.exec("SELECT last_insert_rowid()")[0]?.values[0]?.[0] };
     }
 
-    // ── Rutas API ──────────────────────────────────────────────
+    // ── Endpoints Billeteras ──────────────────────────────────
+    app.get('/api/billeteras', (req, res) => {
+        try {
+            // Calcular saldo actual = saldo_inicial + entradas - salidas
+            const billeteras = queryAll(`
+                SELECT b.*, 
+                (b.saldo_inicial + 
+                 COALESCE((SELECT SUM(amount) FROM transactions WHERE billetera_destino_id = b.id), 0) - 
+                 COALESCE((SELECT SUM(amount) FROM transactions WHERE billetera_origen_id = b.id), 0)
+                ) as saldo_actual
+                FROM billeteras b
+                WHERE b.activo = 1
+            `);
+            res.json({ success: true, data: billeteras });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
 
-    // GET /api/transactions
+    app.post('/api/billeteras', (req, res) => {
+        try {
+            const { nombre, saldo_inicial, color } = req.body;
+            runSql("INSERT INTO billeteras (nombre, saldo_inicial, color) VALUES (?, ?, ?)", 
+                   [nombre, saldo_inicial || 0, color || '#6B7280']);
+            res.json({ success: true });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    // ── Endpoints Propósitos ──────────────────────────────────
+    app.get('/api/propositos', (req, res) => {
+        try {
+            // Calcular monto_actual = aportes (ahorro) - retiros (retiro_ahorro)
+            const propositos = queryAll(`
+                SELECT p.*,
+                COALESCE((SELECT SUM(amount) FROM transactions WHERE proposito_id = p.id AND type = 'ahorro'), 0) -
+                COALESCE((SELECT SUM(amount) FROM transactions WHERE proposito_id = p.id AND type = 'retiro_ahorro'), 0)
+                as monto_actual_calculado
+                FROM propositos p
+            `);
+            // Mapeamos para usar monto_actual_calculado en lugar de la columna estática
+            const data = propositos.map(p => ({
+                ...p,
+                monto_actual: p.monto_actual_calculado
+            }));
+            res.json({ success: true, data });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.post('/api/propositos', (req, res) => {
+        try {
+            const { nombre, monto_objetivo, color } = req.body;
+            runSql("INSERT INTO propositos (nombre, monto_objetivo, color) VALUES (?, ?, ?)", 
+                   [nombre, monto_objetivo, color || '#6B7280']);
+            res.json({ success: true });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    // ── Endpoints Transacciones ────────────────────────────────
     app.get('/api/transactions', (req, res) => {
         try {
-            let query = 'SELECT * FROM transactions WHERE 1=1';
-            const params = [];
-
-            if (req.query.type) {
-                query += ' AND type = ?';
-                params.push(req.query.type);
-            }
-            if (req.query.priority) {
-                query += ' AND priority = ?';
-                params.push(req.query.priority);
-            }
-            if (req.query.dateFrom) {
-                query += ' AND date >= ?';
-                params.push(req.query.dateFrom);
-            }
-            if (req.query.dateTo) {
-                query += ' AND date <= ?';
-                params.push(req.query.dateTo);
-            }
-
-            const sortBy = req.query.sortBy || 'date';
-            const sortOrder = req.query.sortOrder || 'DESC';
-            const validSortFields = ['date', 'amount'];
-            const validSortOrders = ['ASC', 'DESC'];
-
-            if (validSortFields.includes(sortBy) && validSortOrders.includes(sortOrder.toUpperCase())) {
-                query += ` ORDER BY ${sortBy} ${sortOrder.toUpperCase()}`;
-            } else {
-                query += ' ORDER BY date DESC';
-            }
-
-            const transactions = queryAll(query, params);
+            const query = `
+                SELECT t.*, 
+                       bo.nombre as billetera_origen_nombre,
+                       bd.nombre as billetera_destino_nombre,
+                       p.nombre as proposito_nombre
+                FROM transactions t
+                LEFT JOIN billeteras bo ON t.billetera_origen_id = bo.id
+                LEFT JOIN billeteras bd ON t.billetera_destino_id = bd.id
+                LEFT JOIN propositos p ON t.proposito_id = p.id
+                ORDER BY t.date DESC
+            `;
+            const transactions = queryAll(query);
             res.json({ success: true, data: transactions });
         } catch (error) {
-            console.error('Error al obtener transacciones:', error);
-            res.status(500).json({ success: false, error: 'Error al obtener transacciones' });
+            res.status(500).json({ success: false, error: error.message });
         }
     });
 
-    // GET /api/transactions/:id
-    app.get('/api/transactions/:id', (req, res) => {
+    app.post('/api/transactions', upload.single('invoice'), (req, res) => {
         try {
-            const transaction = queryOne('SELECT * FROM transactions WHERE id = ?', [Number(req.params.id)]);
-            if (!transaction) {
-                return res.status(404).json({ success: false, error: 'Transacción no encontrada' });
-            }
-            res.json({ success: true, data: transaction });
+            const { type, date, description, priority, amount, note, billetera_origen_id, billetera_destino_id, proposito_id } = req.body;
+            const invoice_path = req.file ? `/uploads/${req.file.filename}` : null;
+
+            runSql(`INSERT INTO transactions 
+                    (type, date, description, priority, amount, invoice_path, note, billetera_origen_id, billetera_destino_id, proposito_id) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
+                    [type, date, description, priority, amount, invoice_path, note, billetera_origen_id || null, billetera_destino_id || null, proposito_id || null]);
+            
+            res.json({ success: true });
         } catch (error) {
-            console.error('Error al obtener transacción:', error);
-            res.status(500).json({ success: false, error: 'Error al obtener transacción' });
+            res.status(500).json({ success: false, error: error.message });
         }
     });
 
-    // GET /api/summary — Resumen financiero del mes actual
+    app.delete('/api/transactions/:id', (req, res) => {
+        try {
+            const id = req.params.id;
+            const tx = queryOne("SELECT invoice_path FROM transactions WHERE id = ?", [id]);
+            if (tx && tx.invoice_path) {
+                const filePath = path.join(dataDir, tx.invoice_path);
+                if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+            }
+            runSql("DELETE FROM transactions WHERE id = ?", [id]);
+            res.json({ success: true });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
     app.get('/api/summary', (req, res) => {
         try {
             const currentMonth = new Date().toISOString().slice(0, 7);
-
-            const ingresos = queryOne(
-                "SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type = 'ingreso' AND strftime('%Y-%m', date) = ?",
-                [currentMonth]
-            );
-            const egresos = queryOne(
-                "SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type = 'egreso' AND strftime('%Y-%m', date) = ?",
-                [currentMonth]
-            );
-            const ahorros = queryOne(
-                "SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE type = 'ahorro' AND strftime('%Y-%m', date) = ?",
-                [currentMonth]
-            );
+            
+            // Ingresos son los tipo 'ingreso' puros
+            const ingresos = queryOne("SELECT COALESCE(SUM(amount), 0) as t FROM transactions WHERE type = 'ingreso' AND strftime('%Y-%m', date) = ?", [currentMonth]).t;
+            // Egresos son los tipo 'egreso' puros
+            const egresos = queryOne("SELECT COALESCE(SUM(amount), 0) as t FROM transactions WHERE type = 'egreso' AND strftime('%Y-%m', date) = ?", [currentMonth]).t;
+            
+            // Los ahorros netos (históricos globales)
+            const aportes = queryOne("SELECT COALESCE(SUM(amount), 0) as t FROM transactions WHERE type = 'ahorro'").t;
+            const retiros = queryOne("SELECT COALESCE(SUM(amount), 0) as t FROM transactions WHERE type = 'retiro_ahorro'").t;
+            const ahorros_netos = aportes - retiros;
 
             res.json({
                 success: true,
                 data: {
-                    ingresos: ingresos.total,
-                    egresos: egresos.total,
-                    ahorros: ahorros.total,
-                    balance: ingresos.total - egresos.total - ahorros.total,
+                    ingresos,
+                    egresos,
+                    ahorros: ahorros_netos,
+                    balance: ingresos - egresos,
                     month: currentMonth
                 }
             });
         } catch (error) {
-            console.error('Error al obtener resumen:', error);
-            res.status(500).json({ success: false, error: 'Error al obtener resumen' });
+            res.status(500).json({ success: false, error: error.message });
         }
     });
 
-    // GET /api/monthly-summary
     app.get('/api/monthly-summary', (req, res) => {
         try {
             const rows = queryAll(`
@@ -209,150 +265,34 @@ function createApp(options = {}) {
                     strftime('%Y-%m', date) AS month,
                     SUM(CASE WHEN type = 'ingreso' THEN amount ELSE 0 END) AS ingresos,
                     SUM(CASE WHEN type = 'egreso'  THEN amount ELSE 0 END) AS egresos,
-                    SUM(CASE WHEN type = 'ahorro'  THEN amount ELSE 0 END) AS ahorros,
                     COUNT(*) AS total_transactions
                 FROM transactions
                 GROUP BY month
                 ORDER BY month DESC
             `);
-
-            const data = rows.map(row => ({
-                ...row,
-                balance: row.ingresos - row.egresos - row.ahorros
-            }));
-
+            const data = rows.map(r => ({ ...r, balance: r.ingresos - r.egresos }));
             res.json({ success: true, data });
         } catch (error) {
-            console.error('Error al obtener resumen mensual:', error);
-            res.status(500).json({ success: false, error: 'Error al obtener resumen mensual' });
+            res.status(500).json({ success: false, error: error.message });
         }
     });
 
-    // POST /api/transactions
-    app.post('/api/transactions', upload.single('invoice'), (req, res) => {
-        try {
-            const { type, date, description, priority, amount, note } = req.body;
-
-            if (!type || !date || !description || !priority || !amount) {
-                return res.status(400).json({
-                    success: false,
-                    error: 'Faltan campos obligatorios: type, date, description, priority, amount'
+    return {
+        start: async (port = 0) => {
+            await initDatabase();
+            return new Promise((resolve) => {
+                const server = app.listen(port, () => {
+                    resolve({ port: server.address().port, server });
                 });
-            }
-
-            const validTypes = ['ingreso', 'egreso', 'ahorro'];
-            const validPriorities = ['indispensable', 'importante', 'no_prioritario'];
-
-            if (!validTypes.includes(type)) {
-                return res.status(400).json({ success: false, error: 'Tipo inválido' });
-            }
-            if (!validPriorities.includes(priority)) {
-                return res.status(400).json({ success: false, error: 'Prioridad inválida' });
-            }
-
-            const parsedAmount = parseFloat(amount);
-            if (isNaN(parsedAmount) || parsedAmount <= 0) {
-                return res.status(400).json({ success: false, error: 'Monto inválido' });
-            }
-
-            const invoicePath = req.file ? `/uploads/${req.file.filename}` : null;
-
-            const result = runSql(
-                `INSERT INTO transactions (type, date, description, priority, amount, invoice_path, note)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                [type, date, description, priority, parsedAmount, invoicePath, note || null]
-            );
-
-            const transaction = queryOne('SELECT * FROM transactions WHERE id = ?', [result.lastId]);
-            res.status(201).json({ success: true, data: transaction });
-        } catch (error) {
-            console.error('Error al crear transacción:', error);
-            res.status(500).json({ success: false, error: 'Error al crear transacción' });
-        }
-    });
-
-    // DELETE /api/transactions/:id
-    app.delete('/api/transactions/:id', (req, res) => {
-        try {
-            const transaction = queryOne('SELECT * FROM transactions WHERE id = ?', [Number(req.params.id)]);
-            if (!transaction) {
-                return res.status(404).json({ success: false, error: 'Transacción no encontrada' });
-            }
-
-            if (transaction.invoice_path) {
-                // Las facturas están en dataDir (uploads/)
-                const filePath = path.join(dataDir, transaction.invoice_path);
-                if (fs.existsSync(filePath)) {
-                    fs.unlinkSync(filePath);
-                }
-            }
-
-            runSql('DELETE FROM transactions WHERE id = ?', [Number(req.params.id)]);
-            res.json({ success: true, message: 'Transacción eliminada' });
-        } catch (error) {
-            console.error('Error al eliminar transacción:', error);
-            res.status(500).json({ success: false, error: 'Error al eliminar transacción' });
-        }
-    });
-
-    // Manejo de errores de Multer
-    app.use((err, req, res, next) => {
-        if (err instanceof multer.MulterError) {
-            if (err.code === 'LIMIT_FILE_SIZE') {
-                return res.status(400).json({ success: false, error: 'El archivo es demasiado grande. Máximo 10 MB.' });
-            }
-            return res.status(400).json({ success: false, error: err.message });
-        }
-        if (err) {
-            return res.status(500).json({ success: false, error: err.message });
-        }
-        next();
-    });
-
-    // ── start(port) → Promise<{ port, server }> ───────────────
-    async function start(port = 3000) {
-        await initDatabase();
-
-        return new Promise((resolve, reject) => {
-            const server = app.listen(port, () => {
-                const actualPort = server.address().port;
-                resolve({ port: actualPort, server });
             });
-            server.on('error', reject);
-        });
-    }
-
-    // Exponer para cierre limpio
-    function cleanup() {
-        if (db) { saveDatabase(); db.close(); }
-    }
-
-    return { start, cleanup };
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  Modo standalone: node server.js
-// ═══════════════════════════════════════════════════════════════
-if (require.main === module) {
-    const instance = createApp();
-
-    instance.start(3000).then(({ port }) => {
-        console.log('');
-        console.log('  ╔══════════════════════════════════════════════╗');
-        console.log('  ║                                              ║');
-        console.log('  ║   💰  Finanzas Personales - Servidor activo  ║');
-        console.log('  ║                                              ║');
-        console.log(`  ║   🌐  http://localhost:${port}                  ║`);
-        console.log('  ║                                              ║');
-        console.log('  ╚══════════════════════════════════════════════╝');
-        console.log('');
-    }).catch((err) => {
-        console.error('Error fatal al iniciar:', err);
-        process.exit(1);
-    });
-
-    process.on('SIGINT',  () => { instance.cleanup(); process.exit(0); });
-    process.on('SIGTERM', () => { instance.cleanup(); process.exit(0); });
+        },
+        cleanup: () => {
+            if (db) {
+                saveDatabase();
+                db.close();
+            }
+        }
+    };
 }
 
 module.exports = { createApp };

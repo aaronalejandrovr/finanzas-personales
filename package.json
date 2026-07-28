@@ -1,7 +1,7 @@
 {
   "name": "finanzas-personales",
-  "version": "1.0.1",
-  "description": "Aplicación de gestión de finanzas personales",
+  "version": "2.0.0",
+  "description": "Aplicación de gestión de finanzas personales y gestor patrimonial",
   "author": "Finanzas Personales",
   "main": "main.js",
   "scripts": {

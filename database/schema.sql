@@ -1,14 +1,38 @@
 -- Esquema de la base de datos de finanzas personales
+
+CREATE TABLE IF NOT EXISTS billeteras (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT NOT NULL,
+    saldo_inicial REAL DEFAULT 0,
+    color TEXT NOT NULL,
+    activo BOOLEAN DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS propositos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT NOT NULL,
+    monto_objetivo REAL NOT NULL,
+    monto_actual REAL DEFAULT 0,
+    color TEXT NOT NULL,
+    estado TEXT DEFAULT 'activo' CHECK(estado IN ('activo', 'completado'))
+);
+
 CREATE TABLE IF NOT EXISTS transactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    type TEXT NOT NULL CHECK(type IN ('ingreso', 'egreso', 'ahorro')),
+    type TEXT NOT NULL CHECK(type IN ('ingreso', 'egreso', 'ahorro', 'transferencia', 'retiro_ahorro')),
     date TEXT NOT NULL,
     description TEXT NOT NULL,
     priority TEXT NOT NULL CHECK(priority IN ('indispensable', 'importante', 'no_prioritario')),
     amount REAL NOT NULL CHECK(amount > 0),
     invoice_path TEXT,
     note TEXT,
-    created_at TEXT DEFAULT (datetime('now', 'localtime'))
+    billetera_origen_id INTEGER,
+    billetera_destino_id INTEGER,
+    proposito_id INTEGER,
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY(billetera_origen_id) REFERENCES billeteras(id),
+    FOREIGN KEY(billetera_destino_id) REFERENCES billeteras(id),
+    FOREIGN KEY(proposito_id) REFERENCES propositos(id)
 );
 
 -- Índices para optimizar consultas frecuentes
