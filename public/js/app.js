@@ -322,29 +322,20 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('transaction-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         
-        // Hack the type if subAhorro is 'retiro'
         let txType = document.querySelector('input[name="type"]:checked').value;
         const sub = document.querySelector('input[name="sub_ahorro"]:checked').value;
         if (txType === 'ahorro' && sub === 'retiro') {
-            txType = 'retiro_ahorro'; // Override para la BD
+            txType = 'retiro_ahorro';
         }
 
-        const formData = {
-            type: txType,
-            date: e.target.date.value,
-            amount: parseFloat(e.target.amount.value),
-            description: e.target.description.value,
-            priority: e.target.priority.value || 'no_prioritario', // Opcional en ingresos/transferencias
-            billetera_origen_id: e.target.billetera_origen_id.value,
-            billetera_destino_id: e.target.billetera_destino_id.value,
-            proposito_id: e.target.proposito_id.value
-        };
+        const formData = new FormData(e.target);
+        formData.set('type', txType);
+        if (!formData.get('priority')) formData.set('priority', 'no_prioritario');
 
         try {
             const res = await fetch('/api/transactions', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(formData)
+                body: formData
             });
             if (res.ok) {
                 document.getElementById('modal-overlay').classList.add('hidden');
@@ -353,11 +344,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast('Transacción registrada');
                 loadAll();
             } else {
-                throw new Error("Error guardando transacción");
+                const err = await res.json();
+                throw new Error(err.error || "Error guardando transacción");
             }
         } catch (error) {
             console.error(error);
-            showToast('Error al guardar', 'error');
+            showToast('Error: ' + error.message, 'error');
         }
     });
 

@@ -31,19 +31,40 @@ function createApp(options = {}) {
         }
 
         const schema = fs.readFileSync(schemaPath, 'utf-8');
-        db.run(schema);
-
-        // Migración: Agregar nuevas columnas a transactions si no existen
-        const tableInfo = queryAll("PRAGMA table_info(transactions)");
-        const columns = tableInfo.map(c => c.name);
         
-        if (!columns.includes('billetera_origen_id')) {
-            db.run("ALTER TABLE transactions ADD COLUMN billetera_origen_id INTEGER REFERENCES billeteras(id)");
-            db.run("ALTER TABLE transactions ADD COLUMN billetera_destino_id INTEGER REFERENCES billeteras(id)");
-            db.run("ALTER TABLE transactions ADD COLUMN proposito_id INTEGER REFERENCES propositos(id)");
+        // Migración avanzada: Verificar si la tabla existe con el CHECK antiguo ('ingreso', 'egreso', 'ahorro')
+        // En SQLite, no se puede alterar el CHECK, hay que recrear la tabla.
+        const tableDef = queryOne("SELECT sql FROM sqlite_master WHERE type='table' AND name='transactions'");
+        if (tableDef && tableDef.sql.includes("'ahorro')") && !tableDef.sql.includes("'transferencia'")) {
+            console.log("Migrando tabla transactions antigua...");
+            db.run("PRAGMA foreign_keys=OFF");
+            db.run("ALTER TABLE transactions RENAME TO transactions_old");
             
-            // Asignar transacciones antiguas tipo "ahorro" al Ahorro General (id 1)
-            db.run("UPDATE transactions SET proposito_id = 1 WHERE type = 'ahorro'");
+            // Re-ejecutamos schema para crear la nueva tabla con CHECK actualizado y todas las columnas
+            db.run(schema);
+            
+            // Copiamos datos mapeando las columnas antiguas a la nueva
+            const oldCols = queryAll("PRAGMA table_info(transactions_old)").map(c => c.name).join(", ");
+            db.run(`INSERT INTO transactions (${oldCols}) SELECT ${oldCols} FROM transactions_old`);
+            
+            db.run("DROP TABLE transactions_old");
+            db.run("PRAGMA foreign_keys=ON");
+            
+            // Migrar viejos ahorros al propósito "Ahorro General" (se creará luego si no existe)
+            db.run("UPDATE transactions SET proposito_id = 1 WHERE type = 'ahorro' AND proposito_id IS NULL");
+        } else {
+            // Ejecución normal del schema por si es nuevo
+            db.run(schema);
+            
+            // Por si acaso era una base de datos más nueva pero que le faltan columnas (aunque ahora no pasaría, es bueno por robustez)
+            const tableInfo = queryAll("PRAGMA table_info(transactions)");
+            const columns = tableInfo.map(c => c.name);
+            if (!columns.includes('billetera_origen_id')) {
+                db.run("ALTER TABLE transactions ADD COLUMN billetera_origen_id INTEGER REFERENCES billeteras(id)");
+                db.run("ALTER TABLE transactions ADD COLUMN billetera_destino_id INTEGER REFERENCES billeteras(id)");
+                db.run("ALTER TABLE transactions ADD COLUMN proposito_id INTEGER REFERENCES propositos(id)");
+                db.run("UPDATE transactions SET proposito_id = 1 WHERE type = 'ahorro' AND proposito_id IS NULL");
+            }
         }
 
         // Inyectar billeteras por defecto
@@ -206,7 +227,7 @@ function createApp(options = {}) {
             runSql(`INSERT INTO transactions 
                     (type, date, description, priority, amount, invoice_path, note, billetera_origen_id, billetera_destino_id, proposito_id) 
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, 
-                    [type, date, description, priority, amount, invoice_path, note, billetera_origen_id || null, billetera_destino_id || null, proposito_id || null]);
+                    [type, date, description, priority, amount, invoice_path, note || '', billetera_origen_id || null, billetera_destino_id || null, proposito_id || null]);
             
             res.json({ success: true });
         } catch (error) {
