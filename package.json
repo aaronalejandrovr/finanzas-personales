@@ -1,0 +1,68 @@
+{
+  "name": "finanzas-personales",
+  "version": "1.0.0",
+  "description": "Aplicación de gestión de finanzas personales",
+  "author": "Finanzas Personales",
+  "main": "main.js",
+  "scripts": {
+    "start": "node server.js",
+    "electron": "electron .",
+    "build": "electron-builder --win",
+    "postinstall": "electron-builder install-app-deps"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "electron-updater": "^6.8.9",
+    "express": "^4.21.0",
+    "multer": "^1.4.5-lts.1",
+    "sql.js": "^1.11.0"
+  },
+  "devDependencies": {
+    "electron": "^33.4.11",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.finanzas.personales",
+    "productName": "Finanzas Personales",
+    "publish": {
+      "provider": "github",
+      "owner": "aaronalejandrovr",
+      "repo": "finanzas-personales"
+    },
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "server.js",
+      "public/**/*",
+      "database/schema.sql",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/sql.js/dist/*.wasm"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "sign": "./build/sign.js",
+      "signingHashAlgorithms": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerSidebar": null,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Finanzas Personales"
+    }
+  }
+}

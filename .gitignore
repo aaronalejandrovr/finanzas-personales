@@ -1,0 +1,7 @@
+node_modules/
+database/finanzas.db
+database/finanzas.db-wal
+database/finanzas.db-shm
+uploads/*
+!uploads/.gitkeep
+dist/
