@@ -1,4 +1,4 @@
--- Esquema de la base de datos de finanzas personales
+-- Esquema de la base de datos de finanzas personales v3.0.0
 
 CREATE TABLE IF NOT EXISTS billeteras (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -14,7 +14,16 @@ CREATE TABLE IF NOT EXISTS propositos (
     monto_objetivo REAL NOT NULL,
     monto_actual REAL DEFAULT 0,
     color TEXT NOT NULL,
-    estado TEXT DEFAULT 'activo' CHECK(estado IN ('activo', 'completado'))
+    estado TEXT DEFAULT 'activo' CHECK(estado IN ('activo', 'completado')),
+    is_default BOOLEAN DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS evidencias (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    proposito_id INTEGER NOT NULL,
+    image_path TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now', 'localtime')),
+    FOREIGN KEY(proposito_id) REFERENCES propositos(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS transactions (
@@ -39,3 +48,4 @@ CREATE TABLE IF NOT EXISTS transactions (
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
 CREATE INDEX IF NOT EXISTS idx_transactions_priority ON transactions(priority);
+CREATE INDEX IF NOT EXISTS idx_evidencias_proposito ON evidencias(proposito_id);

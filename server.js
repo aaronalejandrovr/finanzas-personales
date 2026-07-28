@@ -32,40 +32,26 @@ function createApp(options = {}) {
 
         const schema = fs.readFileSync(schemaPath, 'utf-8');
         
-        // Migración avanzada: Verificar si la tabla existe con el CHECK antiguo ('ingreso', 'egreso', 'ahorro')
-        // En SQLite, no se puede alterar el CHECK, hay que recrear la tabla.
-        const tableDef = queryOne("SELECT sql FROM sqlite_master WHERE type='table' AND name='transactions'");
-        if (tableDef && tableDef.sql.includes("'ahorro')") && !tableDef.sql.includes("'transferencia'")) {
-            console.log("Migrando tabla transactions antigua...");
-            db.run("PRAGMA foreign_keys=OFF");
-            db.run("ALTER TABLE transactions RENAME TO transactions_old");
-            
-            // Re-ejecutamos schema para crear la nueva tabla con CHECK actualizado y todas las columnas
-            db.run(schema);
-            
-            // Copiamos datos mapeando las columnas antiguas a la nueva
-            const oldCols = queryAll("PRAGMA table_info(transactions_old)").map(c => c.name).join(", ");
-            db.run(`INSERT INTO transactions (${oldCols}) SELECT ${oldCols} FROM transactions_old`);
-            
-            db.run("DROP TABLE transactions_old");
-            db.run("PRAGMA foreign_keys=ON");
-            
-            // Migrar viejos ahorros al propósito "Ahorro General" (se creará luego si no existe)
-            db.run("UPDATE transactions SET proposito_id = 1 WHERE type = 'ahorro' AND proposito_id IS NULL");
-        } else {
-            // Ejecución normal del schema por si es nuevo
-            db.run(schema);
-            
-            // Por si acaso era una base de datos más nueva pero que le faltan columnas (aunque ahora no pasaría, es bueno por robustez)
-            const tableInfo = queryAll("PRAGMA table_info(transactions)");
-            const columns = tableInfo.map(c => c.name);
-            if (!columns.includes('billetera_origen_id')) {
-                db.run("ALTER TABLE transactions ADD COLUMN billetera_origen_id INTEGER REFERENCES billeteras(id)");
-                db.run("ALTER TABLE transactions ADD COLUMN billetera_destino_id INTEGER REFERENCES billeteras(id)");
-                db.run("ALTER TABLE transactions ADD COLUMN proposito_id INTEGER REFERENCES propositos(id)");
-                db.run("UPDATE transactions SET proposito_id = 1 WHERE type = 'ahorro' AND proposito_id IS NULL");
+        // Ejecutar schema base
+        db.run(schema);
+
+        // Migración de columnas adicionales por versiones anteriores
+        const checkColumn = (table, col, alterQuery) => {
+            const cols = queryAll(`PRAGMA table_info(${table})`).map(c => c.name);
+            if (!cols.includes(col)) {
+                try { db.run(alterQuery); } catch(e) { console.error(`Error migrando ${col}:`, e); }
             }
-        }
+        };
+
+        checkColumn('transactions', 'billetera_origen_id', "ALTER TABLE transactions ADD COLUMN billetera_origen_id INTEGER REFERENCES billeteras(id)");
+        checkColumn('transactions', 'billetera_destino_id', "ALTER TABLE transactions ADD COLUMN billetera_destino_id INTEGER REFERENCES billeteras(id)");
+        checkColumn('transactions', 'proposito_id', "ALTER TABLE transactions ADD COLUMN proposito_id INTEGER REFERENCES propositos(id)");
+        checkColumn('propositos', 'is_default', "ALTER TABLE propositos ADD COLUMN is_default BOOLEAN DEFAULT 0");
+        checkColumn('billeteras', 'activo', "ALTER TABLE billeteras ADD COLUMN activo BOOLEAN DEFAULT 1");
+        checkColumn('propositos', 'estado', "ALTER TABLE propositos ADD COLUMN estado TEXT DEFAULT 'activo'");
+
+        // Fix de transacciones antiguas
+        db.run("UPDATE transactions SET proposito_id = 1 WHERE type = 'ahorro' AND proposito_id IS NULL");
 
         // Inyectar billeteras por defecto
         const billeterasCount = queryOne("SELECT COUNT(*) as c FROM billeteras").c;
@@ -77,7 +63,7 @@ function createApp(options = {}) {
                 { nombre: 'Zinli', color: '#EC4899' }, 
                 { nombre: 'PayPal', color: '#003087' } 
             ];
-            const stmt = db.prepare("INSERT INTO billeteras (nombre, color) VALUES (?, ?)");
+            const stmt = db.prepare("INSERT INTO billeteras (nombre, color, activo) VALUES (?, ?, 1)");
             defaultWallets.forEach(w => stmt.run([w.nombre, w.color]));
             stmt.free();
         }
@@ -85,7 +71,10 @@ function createApp(options = {}) {
         // Inyectar propósito general por defecto
         const propositosCount = queryOne("SELECT COUNT(*) as c FROM propositos").c;
         if (propositosCount === 0) {
-            db.run("INSERT INTO propositos (nombre, monto_objetivo, color) VALUES ('Ahorro General', 9999999, '#8B5CF6')");
+            db.run("INSERT INTO propositos (nombre, monto_objetivo, color, is_default) VALUES ('Ahorro General', 9999999, '#8B5CF6', 1)");
+        } else {
+            // Asegurar que el Ahorro General esté marcado como default
+            db.run("UPDATE propositos SET is_default = 1 WHERE id = 1");
         }
 
         saveDatabase();
@@ -109,7 +98,7 @@ function createApp(options = {}) {
         filename: (req, file, cb) => {
             const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
             const ext = path.extname(file.originalname);
-            cb(null, `factura-${uniqueSuffix}${ext}`);
+            cb(null, `archivo-${uniqueSuffix}${ext}`);
         }
     });
 
@@ -138,7 +127,6 @@ function createApp(options = {}) {
     // ── Endpoints Billeteras ──────────────────────────────────
     app.get('/api/billeteras', (req, res) => {
         try {
-            // Calcular saldo actual = saldo_inicial + entradas - salidas
             const billeteras = queryAll(`
                 SELECT b.*, 
                 (b.saldo_inicial + 
@@ -146,7 +134,7 @@ function createApp(options = {}) {
                  COALESCE((SELECT SUM(amount) FROM transactions WHERE billetera_origen_id = b.id), 0)
                 ) as saldo_actual
                 FROM billeteras b
-                WHERE b.activo = 1
+                WHERE b.activo = 1 OR b.activo IS NULL
             `);
             res.json({ success: true, data: billeteras });
         } catch (error) {
@@ -157,7 +145,7 @@ function createApp(options = {}) {
     app.post('/api/billeteras', (req, res) => {
         try {
             const { nombre, saldo_inicial, color } = req.body;
-            runSql("INSERT INTO billeteras (nombre, saldo_inicial, color) VALUES (?, ?, ?)", 
+            runSql("INSERT INTO billeteras (nombre, saldo_inicial, color, activo) VALUES (?, ?, ?, 1)", 
                    [nombre, saldo_inicial || 0, color || '#6B7280']);
             res.json({ success: true });
         } catch (error) {
@@ -165,10 +153,28 @@ function createApp(options = {}) {
         }
     });
 
-    // ── Endpoints Propósitos ──────────────────────────────────
+    app.put('/api/billeteras/:id', (req, res) => {
+        try {
+            const { nombre } = req.body;
+            runSql("UPDATE billeteras SET nombre = ? WHERE id = ?", [nombre, req.params.id]);
+            res.json({ success: true });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.put('/api/billeteras/:id/ocultar', (req, res) => {
+        try {
+            runSql("UPDATE billeteras SET activo = 0 WHERE id = ?", [req.params.id]);
+            res.json({ success: true });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    // ── Endpoints Metas de Ahorro ─────────────────────────────
     app.get('/api/propositos', (req, res) => {
         try {
-            // Calcular monto_actual = aportes (ahorro) - retiros (retiro_ahorro)
             const propositos = queryAll(`
                 SELECT p.*,
                 COALESCE((SELECT SUM(amount) FROM transactions WHERE proposito_id = p.id AND type = 'ahorro'), 0) -
@@ -176,11 +182,7 @@ function createApp(options = {}) {
                 as monto_actual_calculado
                 FROM propositos p
             `);
-            // Mapeamos para usar monto_actual_calculado en lugar de la columna estática
-            const data = propositos.map(p => ({
-                ...p,
-                monto_actual: p.monto_actual_calculado
-            }));
+            const data = propositos.map(p => ({ ...p, monto_actual: p.monto_actual_calculado }));
             res.json({ success: true, data });
         } catch (error) {
             res.status(500).json({ success: false, error: error.message });
@@ -198,10 +200,71 @@ function createApp(options = {}) {
         }
     });
 
+    app.put('/api/propositos/:id', (req, res) => {
+        try {
+            const { nombre, monto_objetivo } = req.body;
+            runSql("UPDATE propositos SET nombre = ?, monto_objetivo = ? WHERE id = ?", 
+                   [nombre, monto_objetivo, req.params.id]);
+            res.json({ success: true });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.delete('/api/propositos/:id', (req, res) => {
+        try {
+            const id = req.params.id;
+            const meta = queryOne("SELECT is_default FROM propositos WHERE id = ?", [id]);
+            if (meta && meta.is_default) {
+                return res.status(400).json({ success: false, error: "No se puede eliminar la meta genérica." });
+            }
+            runSql("UPDATE transactions SET proposito_id = 1 WHERE proposito_id = ?", [id]);
+            runSql("DELETE FROM evidencias WHERE proposito_id = ?", [id]);
+            runSql("DELETE FROM propositos WHERE id = ?", [id]);
+            res.json({ success: true });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.put('/api/propositos/:id/completar', (req, res) => {
+        try {
+            runSql("UPDATE propositos SET estado = 'completado' WHERE id = ?", [req.params.id]);
+            res.json({ success: true });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    // ── Evidencias de Ahorros ─────────────────────────────────
+    app.get('/api/propositos/:id/evidencias', (req, res) => {
+        try {
+            const evidencias = queryAll("SELECT * FROM evidencias WHERE proposito_id = ? ORDER BY created_at DESC", [req.params.id]);
+            res.json({ success: true, data: evidencias });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.post('/api/propositos/:id/evidencias', upload.array('evidencias', 5), (req, res) => {
+        try {
+            if (req.files && req.files.length > 0) {
+                req.files.forEach(file => {
+                    const pathUrl = `/uploads/${file.filename}`;
+                    runSql("INSERT INTO evidencias (proposito_id, image_path) VALUES (?, ?)", [req.params.id, pathUrl]);
+                });
+            }
+            res.json({ success: true });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
     // ── Endpoints Transacciones ────────────────────────────────
     app.get('/api/transactions', (req, res) => {
         try {
-            const query = `
+            const { month, type } = req.query;
+            let query = `
                 SELECT t.*, 
                        bo.nombre as billetera_origen_nombre,
                        bd.nombre as billetera_destino_nombre,
@@ -210,9 +273,22 @@ function createApp(options = {}) {
                 LEFT JOIN billeteras bo ON t.billetera_origen_id = bo.id
                 LEFT JOIN billeteras bd ON t.billetera_destino_id = bd.id
                 LEFT JOIN propositos p ON t.proposito_id = p.id
-                ORDER BY t.date DESC
+                WHERE 1=1
             `;
-            const transactions = queryAll(query);
+            const params = [];
+            
+            if (month) {
+                query += ` AND strftime('%Y-%m', t.date) = ?`;
+                params.push(month);
+            }
+            if (type) {
+                query += ` AND t.type = ?`;
+                params.push(type);
+            }
+            
+            query += ` ORDER BY t.date DESC`;
+            
+            const transactions = queryAll(query, params);
             res.json({ success: true, data: transactions });
         } catch (error) {
             res.status(500).json({ success: false, error: error.message });
@@ -235,15 +311,40 @@ function createApp(options = {}) {
         }
     });
 
-    app.delete('/api/transactions/:id', (req, res) => {
+    app.put('/api/transactions/:id', upload.single('invoice'), (req, res) => {
+        try {
+            const { date, description, priority, amount, note, delete_invoice } = req.body;
+            const id = req.params.id;
+            
+            let query = "UPDATE transactions SET date = ?, description = ?, priority = ?, amount = ?, note = ?";
+            let params = [date, description, priority, amount, note || ''];
+
+            if (req.file) {
+                query += ", invoice_path = ?";
+                params.push(`/uploads/${req.file.filename}`);
+            } else if (delete_invoice === 'true') {
+                query += ", invoice_path = NULL";
+            }
+
+            query += " WHERE id = ?";
+            params.push(id);
+
+            runSql(query, params);
+            res.json({ success: true });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.delete('/api/transactions/:id/invoice', (req, res) => {
         try {
             const id = req.params.id;
             const tx = queryOne("SELECT invoice_path FROM transactions WHERE id = ?", [id]);
             if (tx && tx.invoice_path) {
                 const filePath = path.join(dataDir, tx.invoice_path);
                 if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+                runSql("UPDATE transactions SET invoice_path = NULL WHERE id = ?", [id]);
             }
-            runSql("DELETE FROM transactions WHERE id = ?", [id]);
             res.json({ success: true });
         } catch (error) {
             res.status(500).json({ success: false, error: error.message });
@@ -254,15 +355,14 @@ function createApp(options = {}) {
         try {
             const currentMonth = new Date().toISOString().slice(0, 7);
             
-            // Ingresos son los tipo 'ingreso' puros
             const ingresos = queryOne("SELECT COALESCE(SUM(amount), 0) as t FROM transactions WHERE type = 'ingreso' AND strftime('%Y-%m', date) = ?", [currentMonth]).t;
-            // Egresos son los tipo 'egreso' puros
             const egresos = queryOne("SELECT COALESCE(SUM(amount), 0) as t FROM transactions WHERE type = 'egreso' AND strftime('%Y-%m', date) = ?", [currentMonth]).t;
             
-            // Los ahorros netos (históricos globales)
             const aportes = queryOne("SELECT COALESCE(SUM(amount), 0) as t FROM transactions WHERE type = 'ahorro'").t;
             const retiros = queryOne("SELECT COALESCE(SUM(amount), 0) as t FROM transactions WHERE type = 'retiro_ahorro'").t;
             const ahorros_netos = aportes - retiros;
+
+            const baseBilleteras = queryOne("SELECT COALESCE(SUM(saldo_inicial), 0) as t FROM billeteras WHERE activo = 1 OR activo IS NULL").t;
 
             res.json({
                 success: true,
@@ -270,7 +370,7 @@ function createApp(options = {}) {
                     ingresos,
                     egresos,
                     ahorros: ahorros_netos,
-                    balance: ingresos - egresos,
+                    balance: (baseBilleteras + ingresos) - egresos, 
                     month: currentMonth
                 }
             });

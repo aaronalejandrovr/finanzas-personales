@@ -49,8 +49,8 @@
                 
                 <!-- Navegación por pestañas -->
                 <nav class="flex gap-4 sm:gap-8 h-full" id="main-tabs">
-                    <button class="tab-btn active font-medium text-sm px-2 py-4 h-full flex items-center" data-target="tab-dashboard">Dashboard</button>
-                    <button class="tab-btn font-medium text-sm px-2 py-4 h-full flex items-center" data-target="tab-propositos">Propósitos</button>
+                    <button class="tab-btn active font-medium text-sm px-2 py-4 h-full flex items-center" data-target="tab-registros">Registros</button>
+                    <button class="tab-btn font-medium text-sm px-2 py-4 h-full flex items-center" data-target="tab-ahorros">Ahorros</button>
                     <button class="tab-btn font-medium text-sm px-2 py-4 h-full flex items-center" data-target="tab-billeteras">Billeteras</button>
                 </nav>
 
@@ -65,43 +65,45 @@
     <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full flex-grow relative">
         
         <!-- ========================================== -->
-        <!-- PESTAÑA 1: DASHBOARD & HISTORIAL           -->
+        <!-- PESTAÑA 1: REGISTROS                       -->
         <!-- ========================================== -->
-        <div id="tab-dashboard" class="tab-content space-y-8 animate-fade-in block">
+        <div id="tab-registros" class="tab-content space-y-8 animate-fade-in block">
+            <div class="flex items-center justify-between">
+                <h2 id="mes-actual-lbl" class="text-xl font-bold text-white capitalize">Mes Actual</h2>
+                <button id="btn-back-to-current" class="hidden text-sm text-accent-400 hover:text-accent-300">Volver al mes en curso</button>
+            </div>
+
+            <!-- Tarjetas Interactivas -->
             <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div class="card-glow relative overflow-hidden rounded-2xl bg-surface-900 border border-white/5 p-5">
+                <button class="card-glow text-left relative overflow-hidden rounded-2xl bg-surface-900 border border-white/5 p-5 card-filter" data-filter="ingreso">
                     <span class="text-sm font-medium text-gray-400">Ingresos</span>
                     <p class="text-xs text-gray-600 mb-2">Este mes</p>
-                    <p id="total-ingresos" class="text-2xl font-bold text-income">0.00 <span class="text-sm">USDT</span></p>
-                </div>
-                <div class="card-glow relative overflow-hidden rounded-2xl bg-surface-900 border border-white/5 p-5">
+                    <p id="total-ingresos" class="text-2xl font-bold text-income">0.00 <span class="text-sm">USD</span></p>
+                </button>
+                <button class="card-glow text-left relative overflow-hidden rounded-2xl bg-surface-900 border border-white/5 p-5 card-filter" data-filter="egreso">
                     <span class="text-sm font-medium text-gray-400">Egresos</span>
                     <p class="text-xs text-gray-600 mb-2">Este mes</p>
-                    <p id="total-egresos" class="text-2xl font-bold text-expense">0.00 <span class="text-sm">USDT</span></p>
-                </div>
+                    <p id="total-egresos" class="text-2xl font-bold text-expense">0.00 <span class="text-sm">USD</span></p>
+                </button>
                 <div class="card-glow relative overflow-hidden rounded-2xl bg-surface-900 border border-white/5 p-5">
                     <span class="text-sm font-medium text-gray-400">Fondos de Ahorro</span>
                     <p class="text-xs text-gray-600 mb-2">Neto global</p>
-                    <p id="total-ahorros" class="text-2xl font-bold text-savings">0.00 <span class="text-sm">USDT</span></p>
+                    <p id="total-ahorros" class="text-2xl font-bold text-savings">0.00 <span class="text-sm">USD</span></p>
                 </div>
                 <div class="card-glow relative overflow-hidden rounded-2xl bg-surface-900 border border-white/5 p-5">
                     <span class="text-sm font-medium text-gray-400">Balance</span>
-                    <p class="text-xs text-gray-600 mb-2">Este mes (In - Out)</p>
-                    <p id="total-balance" class="text-2xl font-bold text-accent-400">0.00 <span class="text-sm">USDT</span></p>
+                    <p class="text-xs text-gray-600 mb-2">Patrimonio Líquido</p>
+                    <p id="total-balance" class="text-2xl font-bold text-accent-400">0.00 <span class="text-sm">USD</span></p>
                 </div>
             </section>
 
-            <section class="rounded-2xl bg-surface-900 border border-white/5 overflow-hidden">
-                <div class="px-5 py-4 border-b border-white/5 flex justify-between items-center">
+            <!-- Historial -->
+            <section class="rounded-2xl bg-surface-900 border border-white/5 overflow-hidden relative">
+                <div id="read-only-banner" class="hidden bg-expense/10 text-expense px-4 py-2 text-xs font-semibold text-center w-full">
+                    ESTE MES ESTÁ ARCHIVADO - MODO SOLO LECTURA
+                </div>
+                <div class="px-5 py-4 border-b border-white/5">
                     <h2 class="text-sm font-semibold text-gray-300 uppercase">Historial de Transacciones</h2>
-                    <select id="filter-type" class="input-field py-1 px-2 text-xs w-auto">
-                        <option value="">Todas</option>
-                        <option value="ingreso">Ingreso</option>
-                        <option value="egreso">Egreso</option>
-                        <option value="ahorro">Aporte Ahorro</option>
-                        <option value="retiro_ahorro">Retiro Ahorro</option>
-                        <option value="transferencia">Transferencia</option>
-                    </select>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full">
@@ -118,23 +120,46 @@
                     </table>
                 </div>
             </section>
+
+            <!-- Sistema de Archivado -->
+            <section class="pt-4 border-t border-white/5">
+                <h3 class="text-sm font-bold text-gray-300 mb-4 flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+                    Archivo Histórico
+                </h3>
+                <div id="archive-container" class="space-y-4">
+                    <!-- Dinámico -->
+                </div>
+            </section>
         </div>
 
         <!-- ========================================== -->
-        <!-- PESTAÑA 2: PROPÓSITOS                      -->
+        <!-- PESTAÑA 2: AHORROS                         -->
         <!-- ========================================== -->
-        <div id="tab-propositos" class="tab-content space-y-6 hidden">
+        <div id="tab-ahorros" class="tab-content space-y-6 hidden">
             <div class="flex items-center justify-between">
                 <div>
                     <h2 class="text-xl font-bold text-white">Metas y Ahorros</h2>
                     <p class="text-sm text-gray-400">Gestiona hacia dónde va tu dinero reservado.</p>
                 </div>
                 <button id="btn-new-proposito" class="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium text-sm transition-colors border border-white/10">
-                    + Crear Propósito
+                    + Crear Meta
                 </button>
             </div>
+            
+            <h3 class="text-sm font-semibold text-gray-300 uppercase tracking-wide border-b border-white/5 pb-2">Metas en Curso</h3>
             <div id="propositos-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
                 <!-- Dinámico -->
+            </div>
+
+            <div id="metas-logradas-section" class="hidden mt-10">
+                <h3 class="text-sm font-semibold text-income uppercase tracking-wide border-b border-income/20 pb-2 mb-4 flex items-center gap-2">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    Metas Logradas
+                </h3>
+                <div id="logradas-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                    <!-- Dinámico -->
+                </div>
             </div>
         </div>
 
@@ -152,18 +177,13 @@
                 </button>
             </div>
 
-            <!-- Barra de Liquidez -->
             <div class="bg-surface-900 rounded-2xl border border-white/5 p-5">
                 <div class="flex justify-between items-end mb-3">
                     <span class="text-sm font-medium text-gray-400">Patrimonio Líquido Total</span>
-                    <span id="liquidez-total" class="text-2xl font-bold text-white">0.00 USDT</span>
+                    <span id="liquidez-total" class="text-2xl font-bold text-white">0.00 USD</span>
                 </div>
-                <div class="h-3 rounded-full flex overflow-hidden bg-surface-800" id="liquidez-bar">
-                    <!-- Dinámico -->
-                </div>
-                <div id="liquidez-leyenda" class="flex flex-wrap gap-4 mt-4 text-xs font-medium">
-                    <!-- Dinámico -->
-                </div>
+                <div class="h-3 rounded-full flex overflow-hidden bg-surface-800" id="liquidez-bar"></div>
+                <div id="liquidez-leyenda" class="flex flex-wrap gap-4 mt-4 text-xs font-medium"></div>
             </div>
 
             <div id="billeteras-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -173,20 +193,21 @@
 
     </main>
 
-    <!-- ═══ Modal: Nueva Transacción (Dinámico) ═══ -->
+    <!-- ═══ Modal: Nueva/Editar Transacción ═══ -->
     <div id="modal-overlay" class="fixed inset-0 z-50 hidden">
         <div class="absolute inset-0 bg-black/60 backdrop-blur-sm modal-backdrop" id="modal-backdrop-click"></div>
         <div class="relative flex items-center justify-center min-h-full p-4">
-            <div class="relative w-full max-w-lg bg-surface-900 rounded-2xl border border-white/10 shadow-2xl modal-enter">
-                <div class="flex items-center justify-between px-6 py-4 border-b border-white/5">
-                    <h3 class="text-lg font-bold text-white">Nueva Transacción</h3>
+            <div class="relative w-full max-w-lg bg-surface-900 rounded-2xl border border-white/10 shadow-2xl modal-enter max-h-[90vh] overflow-y-auto">
+                <div class="flex items-center justify-between px-6 py-4 border-b border-white/5 sticky top-0 bg-surface-900/90 backdrop-blur z-10">
+                    <h3 id="tx-modal-title" class="text-lg font-bold text-white">Nueva Transacción</h3>
                     <button id="btn-close-modal" class="text-gray-400 hover:text-white"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
                 </div>
                 
                 <form id="transaction-form" class="p-6 space-y-5" enctype="multipart/form-data">
+                    <input type="hidden" id="tx-id-input" name="id" value="">
                     
-                    <!-- Selectores de Tipo -->
-                    <div>
+                    <!-- Naturaleza (Oculto en edición) -->
+                    <div id="tx-type-section">
                         <label class="block text-xs font-semibold text-gray-400 mb-2 uppercase">Naturaleza</label>
                         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
                             <label class="type-option"><input type="radio" name="type" value="ingreso" class="sr-only peer" checked><div class="text-center py-2 rounded-lg border border-white/10 peer-checked:bg-income/20 peer-checked:text-income peer-checked:border-income/50 text-xs text-gray-400 cursor-pointer">Ingreso</div></label>
@@ -194,98 +215,131 @@
                             <label class="type-option"><input type="radio" name="type" value="transferencia" class="sr-only peer"><div class="text-center py-2 rounded-lg border border-white/10 peer-checked:bg-transfer/20 peer-checked:text-transfer peer-checked:border-transfer/50 text-xs text-gray-400 cursor-pointer">Transferir</div></label>
                             <label class="type-option"><input type="radio" name="type" value="ahorro" class="sr-only peer"><div class="text-center py-2 rounded-lg border border-white/10 peer-checked:bg-savings/20 peer-checked:text-savings peer-checked:border-savings/50 text-xs text-gray-400 cursor-pointer">Ahorrar</div></label>
                         </div>
-                        <!-- Sub-tipo para ahorro -->
                         <div id="sub-tipo-ahorro" class="mt-2 hidden flex gap-2">
                             <label class="flex-1"><input type="radio" name="sub_ahorro" value="aporte" checked> <span class="text-xs text-gray-300">+ Aportar</span></label>
                             <label class="flex-1"><input type="radio" name="sub_ahorro" value="retiro"> <span class="text-xs text-gray-300">- Retirar</span></label>
                         </div>
                     </div>
 
-                    <!-- Routing de Cuentas (Dinámico) -->
+                    <!-- Routing (Disabled in Edit if not supported, but we will keep it simple: routing cannot be edited) -->
                     <div class="p-4 bg-white/5 rounded-xl border border-white/5 space-y-3" id="routing-container">
-                        
-                        <!-- Origen -->
                         <div id="group-origen" class="hidden">
                             <label class="block text-xs text-gray-400 mb-1">Desde Billetera (Resta)</label>
                             <select id="tx-origen" name="billetera_origen_id" class="input-field w-full"></select>
                         </div>
-
-                        <!-- Destino -->
                         <div id="group-destino" class="hidden">
                             <label class="block text-xs text-gray-400 mb-1">Hacia Billetera (Suma)</label>
                             <select id="tx-destino" name="billetera_destino_id" class="input-field w-full"></select>
                         </div>
-
-                        <!-- Propósito -->
                         <div id="group-proposito" class="hidden">
-                            <label class="block text-xs text-gray-400 mb-1" id="label-proposito">Propósito Objetivo</label>
+                            <label class="block text-xs text-gray-400 mb-1">Meta de Ahorro</label>
                             <select id="tx-proposito" name="proposito_id" class="input-field w-full"></select>
                         </div>
-
                     </div>
 
-                    <!-- Datos base -->
                     <div class="grid grid-cols-2 gap-3">
                         <div>
                             <label class="block text-xs text-gray-400 mb-1">Fecha *</label>
-                            <input type="date" name="date" required class="input-field w-full">
+                            <input type="date" id="tx-date" name="date" required class="input-field w-full">
                         </div>
                         <div>
-                            <label class="block text-xs text-gray-400 mb-1">Monto *</label>
-                            <input type="number" name="amount" required min="0.01" step="0.01" class="input-field w-full" placeholder="0.00">
+                            <label class="block text-xs text-gray-400 mb-1">Monto (USD) *</label>
+                            <input type="number" id="tx-amount" name="amount" required min="0.01" step="0.01" class="input-field w-full" placeholder="0.00">
                         </div>
                     </div>
 
                     <div>
                         <label class="block text-xs text-gray-400 mb-1">Descripción / Concepto *</label>
-                        <input type="text" name="description" required class="input-field w-full">
+                        <input type="text" id="tx-desc" name="description" required class="input-field w-full">
                     </div>
 
                     <div id="group-priority">
-                        <label class="block text-xs text-gray-400 mb-1">Prioridad (Para Egresos)</label>
-                        <select name="priority" class="input-field w-full">
+                        <label class="block text-xs text-gray-400 mb-1">Prioridad</label>
+                        <select id="tx-priority" name="priority" class="input-field w-full">
                             <option value="indispensable">Indispensable</option>
                             <option value="importante">Importante</option>
                             <option value="no_prioritario">No prioritario</option>
                         </select>
                     </div>
+                    
+                    <div>
+                        <label class="block text-xs text-gray-400 mb-1">Notas Adicionales</label>
+                        <textarea id="tx-note" name="note" class="input-field w-full" rows="2" placeholder="Opcional..."></textarea>
+                    </div>
 
-                    <button type="submit" class="w-full py-3 rounded-xl bg-accent-600 hover:bg-accent-500 text-white font-bold transition-colors">Registrar</button>
+                    <!-- Adjuntos -->
+                    <div class="bg-surface-850 p-4 rounded-xl border border-white/5 space-y-3">
+                        <label class="block text-xs font-semibold text-gray-400 uppercase">Comprobante / Captura</label>
+                        
+                        <div id="tx-current-invoice" class="hidden bg-white/5 p-3 rounded-lg border border-white/10 flex items-center justify-between">
+                            <div class="flex items-center gap-2">
+                                <svg class="w-5 h-5 text-accent-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                                <span class="text-sm text-gray-300">Comprobante actual adjunto</span>
+                            </div>
+                            <div class="flex gap-2">
+                                <button type="button" id="btn-view-invoice" class="text-xs text-accent-400 hover:text-accent-300">Ver</button>
+                                <button type="button" id="btn-remove-invoice" class="text-xs text-expense hover:text-red-400">Quitar</button>
+                            </div>
+                            <input type="hidden" name="delete_invoice" id="tx-delete-invoice-flag" value="false">
+                        </div>
+
+                        <div>
+                            <input type="file" id="tx-invoice" name="invoice" accept="image/*,.pdf" class="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-accent-600 file:text-white hover:file:bg-accent-500 transition-all cursor-pointer">
+                            <p class="text-xs text-gray-500 mt-1" id="tx-invoice-help">Opcional. Si subes uno nuevo, reemplazará al actual.</p>
+                        </div>
+                    </div>
+
+                    <button type="submit" id="tx-submit-btn" class="w-full py-3 rounded-xl bg-accent-600 hover:bg-accent-500 text-white font-bold transition-colors">Registrar</button>
                 </form>
             </div>
         </div>
     </div>
 
-    <!-- Modales Secundarios (Crear Propósito y Crear Billetera) -->
-    <!-- Modal: Billetera -->
+    <!-- Modal: Visor de Imagen -->
+    <div id="modal-image-viewer" class="fixed inset-0 z-[60] hidden bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
+        <button id="btn-close-viewer" class="absolute top-6 right-6 text-white hover:text-gray-300"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+        <img id="viewer-img" src="" alt="Comprobante" class="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl">
+    </div>
+
+    <!-- Modales Secundarios (Crear/Editar Billetera, Crear/Editar Meta, Evidencias) -->
+    
+    <!-- Billetera -->
     <div id="modal-billetera" class="fixed inset-0 z-50 hidden bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="bg-surface-900 p-6 rounded-2xl w-full max-w-sm border border-white/10">
-            <h3 class="text-lg font-bold text-white mb-4">Nueva Billetera</h3>
+            <h3 class="text-lg font-bold text-white mb-4" id="billetera-modal-title">Nueva Billetera</h3>
             <form id="form-billetera" class="space-y-4">
-                <input type="text" name="nombre" placeholder="Nombre (ej. Uphold)" required class="input-field w-full">
-                <input type="number" name="saldo_inicial" placeholder="Saldo inicial (opcional)" class="input-field w-full" step="0.01">
-                <div class="flex items-center gap-2">
+                <input type="hidden" id="billetera-id" name="id" value="">
+                <input type="text" id="billetera-nombre" name="nombre" placeholder="Nombre (ej. Uphold)" required class="input-field w-full">
+                
+                <div id="billetera-saldo-group" class="space-y-3">
+                    <input type="number" id="billetera-saldo" name="saldo_inicial" placeholder="Saldo inicial (opcional)" class="input-field w-full" step="0.01">
+                    <input type="number" id="billetera-saldo-confirm" placeholder="Confirma el saldo inicial" class="input-field w-full border-accent-500/50" step="0.01">
+                    <p class="text-xs text-expense hidden" id="billetera-error">Los saldos no coinciden.</p>
+                </div>
+
+                <div class="flex items-center gap-2" id="billetera-color-group">
                     <label class="text-sm text-gray-400">Color:</label>
-                    <input type="color" name="color" value="#8b5cf6" class="w-8 h-8 rounded cursor-pointer bg-transparent border-0">
+                    <input type="color" id="billetera-color" name="color" value="#8b5cf6" class="w-8 h-8 rounded cursor-pointer bg-transparent border-0">
                 </div>
                 <div class="flex gap-2">
                     <button type="button" class="btn-close-sec px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 w-full text-white">Cancelar</button>
-                    <button type="submit" class="px-4 py-2 rounded-xl bg-accent-600 hover:bg-accent-500 w-full text-white">Guardar</button>
+                    <button type="submit" id="billetera-submit-btn" class="px-4 py-2 rounded-xl bg-accent-600 hover:bg-accent-500 w-full text-white disabled:opacity-50">Guardar</button>
                 </div>
             </form>
         </div>
     </div>
 
-    <!-- Modal: Propósito -->
+    <!-- Meta de Ahorro -->
     <div id="modal-proposito" class="fixed inset-0 z-50 hidden bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
         <div class="bg-surface-900 p-6 rounded-2xl w-full max-w-sm border border-white/10">
-            <h3 class="text-lg font-bold text-white mb-4">Nuevo Propósito</h3>
+            <h3 class="text-lg font-bold text-white mb-4" id="proposito-modal-title">Nueva Meta</h3>
             <form id="form-proposito" class="space-y-4">
-                <input type="text" name="nombre" placeholder="Meta (ej. Laptop nueva)" required class="input-field w-full">
-                <input type="number" name="monto_objetivo" placeholder="Monto objetivo" required min="1" step="0.01" class="input-field w-full">
-                <div class="flex items-center gap-2">
+                <input type="hidden" id="proposito-id" name="id" value="">
+                <input type="text" id="proposito-nombre" name="nombre" placeholder="Meta (ej. Laptop nueva)" required class="input-field w-full">
+                <input type="number" id="proposito-monto" name="monto_objetivo" placeholder="Monto objetivo (USD)" required min="1" step="0.01" class="input-field w-full">
+                <div class="flex items-center gap-2" id="proposito-color-group">
                     <label class="text-sm text-gray-400">Color:</label>
-                    <input type="color" name="color" value="#34d399" class="w-8 h-8 rounded cursor-pointer bg-transparent border-0">
+                    <input type="color" id="proposito-color" name="color" value="#34d399" class="w-8 h-8 rounded cursor-pointer bg-transparent border-0">
                 </div>
                 <div class="flex gap-2">
                     <button type="button" class="btn-close-sec px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 w-full text-white">Cancelar</button>
@@ -295,7 +349,52 @@
         </div>
     </div>
 
-    <div id="toast-container" class="fixed bottom-6 right-6 z-[60] flex flex-col gap-2"></div>
+    <!-- Evidencias -->
+    <div id="modal-evidencias" class="fixed inset-0 z-[55] hidden bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+        <div class="bg-surface-900 p-6 rounded-2xl w-full max-w-2xl border border-white/10 relative overflow-hidden">
+            <!-- Confeti background estético -->
+            <div class="absolute inset-0 bg-gradient-to-br from-income/10 via-transparent to-accent-600/10 pointer-events-none"></div>
+            
+            <div class="relative z-10">
+                <div class="flex justify-between items-start mb-6">
+                    <div>
+                        <h3 class="text-2xl font-bold text-white flex items-center gap-2">
+                            🎉 ¡Meta Lograda!
+                        </h3>
+                        <p class="text-gray-400 mt-1" id="evidencias-meta-nombre">Cargando...</p>
+                    </div>
+                    <button type="button" class="btn-close-sec text-gray-400 hover:text-white"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <!-- Lista de evidencias (Galería) -->
+                    <div class="bg-surface-950 p-4 rounded-xl border border-white/5 h-[300px] overflow-y-auto">
+                        <h4 class="text-xs font-semibold text-gray-500 uppercase mb-3">Galería de Logros</h4>
+                        <div id="evidencias-gallery" class="grid grid-cols-2 gap-2">
+                            <!-- Dinámico -->
+                        </div>
+                    </div>
+
+                    <!-- Subir nueva -->
+                    <div class="flex flex-col justify-center">
+                        <form id="form-evidencias" class="space-y-4">
+                            <input type="hidden" id="evidencia-proposito-id" name="proposito_id" value="">
+                            <div class="border-2 border-dashed border-white/20 rounded-xl p-6 text-center hover:bg-white/5 transition cursor-pointer" onclick="document.getElementById('evidencia-files').click()">
+                                <svg class="w-8 h-8 mx-auto text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                                <p class="text-sm font-medium text-white">Subir más fotos</p>
+                                <p class="text-xs text-gray-500 mt-1">Soporta múltiples imágenes</p>
+                                <input type="file" id="evidencia-files" name="evidencias" multiple accept="image/*" class="hidden">
+                            </div>
+                            <div id="evidencia-preview-names" class="text-xs text-accent-400 font-medium"></div>
+                            <button type="submit" id="btn-upload-evidencia" class="w-full py-2.5 rounded-xl bg-income hover:bg-emerald-500 text-surface-950 font-bold transition hidden">Subir y Guardar</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="toast-container" class="fixed bottom-6 right-6 z-[70] flex flex-col gap-2"></div>
     <script src="/js/app.js"></script>
 </body>
 </html>
