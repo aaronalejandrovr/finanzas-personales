@@ -85,16 +85,16 @@
                     <p class="text-xs text-gray-600 mb-2">Este mes</p>
                     <p id="total-egresos" class="text-2xl font-bold text-expense">0.00 <span class="text-sm">USD</span></p>
                 </button>
-                <div class="card-glow relative overflow-hidden rounded-2xl bg-surface-900 border border-white/5 p-5">
+                <button id="btn-go-ahorros" class="card-glow text-left relative overflow-hidden rounded-2xl bg-surface-900 border border-white/5 p-5 hover:border-savings/50 transition">
                     <span class="text-sm font-medium text-gray-400">Fondos de Ahorro</span>
                     <p class="text-xs text-gray-600 mb-2">Neto global</p>
                     <p id="total-ahorros" class="text-2xl font-bold text-savings">0.00 <span class="text-sm">USD</span></p>
-                </div>
-                <div class="card-glow relative overflow-hidden rounded-2xl bg-surface-900 border border-white/5 p-5">
+                </button>
+                <button id="btn-go-billeteras" class="card-glow text-left relative overflow-hidden rounded-2xl bg-surface-900 border border-white/5 p-5 hover:border-accent-400/50 transition">
                     <span class="text-sm font-medium text-gray-400">Balance</span>
                     <p class="text-xs text-gray-600 mb-2">Patrimonio Líquido</p>
                     <p id="total-balance" class="text-2xl font-bold text-accent-400">0.00 <span class="text-sm">USD</span></p>
-                </div>
+                </button>
             </section>
 
             <!-- Historial -->
@@ -391,6 +391,28 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Modal: Desglose de Billetera -->
+    <div id="modal-desglose-billetera" class="fixed inset-0 z-50 hidden bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-surface-900 p-6 rounded-2xl w-full max-w-md border border-white/10 shadow-2xl">
+            <div class="flex justify-between items-start mb-6">
+                <div>
+                    <h3 class="text-lg font-bold text-white" id="desglose-billetera-nombre">Cargando...</h3>
+                    <p class="text-sm text-gray-400" id="desglose-billetera-saldo">0.00 USD</p>
+                </div>
+                <button type="button" class="btn-close-sec text-gray-400 hover:text-white"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+            </div>
+            
+            <div class="bg-surface-950 rounded-xl border border-white/5 p-4 mb-4">
+                <h4 class="text-xs font-semibold text-gray-500 uppercase mb-3">Distribución de Fondos</h4>
+                <div id="desglose-lista" class="space-y-3">
+                    <!-- Dinámico -->
+                </div>
+            </div>
+            
+            <button type="button" class="btn-close-sec w-full py-2 rounded-xl bg-white/5 hover:bg-white/10 text-white font-medium">Cerrar</button>
         </div>
     </div>
 

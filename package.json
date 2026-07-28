@@ -1,6 +1,6 @@
 {
   "name": "finanzas-personales",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "description": "Aplicación de gestión de finanzas personales y gestor patrimonial",
   "author": "Finanzas Personales",
   "main": "main.js",

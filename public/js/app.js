@@ -64,6 +64,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const modalProposito = setupModal('modal-proposito', 'btn-new-proposito', '#modal-proposito .btn-close-sec', 'modal-proposito');
     const modalEvidencias = setupModal('modal-evidencias', null, '#modal-evidencias .btn-close-sec');
     const modalViewer = setupModal('modal-image-viewer', null, '#btn-close-viewer', 'modal-image-viewer');
+    const modalDesglose = setupModal('modal-desglose-billetera', null, '#modal-desglose-billetera .btn-close-sec', 'modal-desglose-billetera');
+
+    // Navegación desde Dashboard
+    document.getElementById('btn-go-ahorros').addEventListener('click', () => {
+        document.querySelector('.tab-btn[data-target="tab-ahorros"]').click();
+    });
+    document.getElementById('btn-go-billeteras').addEventListener('click', () => {
+        document.querySelector('.tab-btn[data-target="tab-billeteras"]').click();
+    });
 
     // Override open de modal tx para limpiar campos si es nuevo
     document.getElementById('btn-new-transaction').addEventListener('click', () => {
@@ -328,10 +337,10 @@ document.addEventListener('DOMContentLoaded', () => {
             const isNegative = b.saldo_actual < 0;
             
             grid.innerHTML += `
-                <div class="bg-surface-900 border border-white/5 rounded-2xl p-5 hover:border-white/10 transition relative group">
+                <div class="bg-surface-900 border border-white/5 rounded-2xl p-5 hover:border-white/10 transition relative group cursor-pointer" onclick="openDesglose(${b.id}, '${b.nombre.replace(/'/g, "\\'")}')">
                     <div class="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition flex gap-1">
-                        <button onclick="editBilletera(${b.id}, '${b.nombre}')" class="p-1 text-gray-400 hover:text-accent-400 bg-surface-950 rounded"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg></button>
-                        <button onclick="hideBilletera(${b.id}, '${b.nombre}')" class="p-1 text-gray-400 hover:text-expense bg-surface-950 rounded" title="Ocultar (Eliminado lógico)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.29 3.29m0 0a10.05 10.05 0 015.71-2.29c4.478 0 8.268 2.943 9.542 7a10.025 10.025 0 01-4.132 5.411m0 0l-3.29-3.29"/></svg></button>
+                        <button onclick="event.stopPropagation(); editBilletera(${b.id}, '${b.nombre}')" class="p-1 text-gray-400 hover:text-accent-400 bg-surface-950 rounded"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg></button>
+                        <button onclick="event.stopPropagation(); hideBilletera(${b.id}, '${b.nombre}')" class="p-1 text-gray-400 hover:text-expense bg-surface-950 rounded" title="Ocultar (Eliminado lógico)"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.29 3.29m0 0a10.05 10.05 0 015.71-2.29c4.478 0 8.268 2.943 9.542 7a10.025 10.025 0 01-4.132 5.411m0 0l-3.29-3.29"/></svg></button>
                     </div>
                     <div class="flex items-center gap-3 mb-4">
                         <div class="w-8 h-8 rounded-full" style="background-color: ${b.color}"></div>
@@ -350,6 +359,54 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    window.openDesglose = async (id, nombre) => {
+        document.getElementById('desglose-billetera-nombre').innerText = nombre;
+        document.getElementById('desglose-billetera-saldo').innerText = 'Calculando...';
+        document.getElementById('desglose-lista').innerHTML = '<p class="text-xs text-gray-500">Cargando desglose...</p>';
+        modalDesglose.open();
+
+        try {
+            const res = await fetch(`/api/billeteras/${id}/desglose`);
+            const json = await res.json();
+            if (res.ok) {
+                const data = json.data;
+                document.getElementById('desglose-billetera-saldo').innerText = `${data.saldo_actual.toFixed(2)} USD Disponibles`;
+                
+                let html = '';
+                if (data.metas && data.metas.length > 0) {
+                    data.metas.forEach(m => {
+                        html += `
+                            <div class="flex items-center justify-between p-2 rounded-lg bg-surface-900 border border-white/5">
+                                <div class="flex items-center gap-2">
+                                    <div class="w-3 h-3 rounded-full" style="background-color: ${m.color}"></div>
+                                    <span class="text-sm font-medium text-white">${m.nombre}</span>
+                                </div>
+                                <span class="text-sm font-bold" style="color: ${m.color}">$${m.asignado.toFixed(2)}</span>
+                            </div>
+                        `;
+                    });
+                }
+                
+                // Agregar Liquidez sin asignar siempre
+                html += `
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-surface-850 border border-white/5 mt-2">
+                        <div class="flex items-center gap-2">
+                            <div class="w-3 h-3 rounded-full bg-gray-500"></div>
+                            <span class="text-sm font-medium text-gray-400">Liquidez Sin Asignar</span>
+                        </div>
+                        <span class="text-sm font-bold text-gray-400">$${data.sin_asignar.toFixed(2)}</span>
+                    </div>
+                `;
+                
+                document.getElementById('desglose-lista').innerHTML = html;
+            } else {
+                throw new Error("Error en servidor");
+            }
+        } catch (error) {
+            document.getElementById('desglose-lista').innerHTML = '<p class="text-xs text-expense">Error al cargar el desglose.</p>';
+        }
+    };
 
     function renderPropositosTab() {
         const gridActivos = document.getElementById('propositos-grid');
@@ -387,39 +444,51 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
             } else {
                 // Activo
-                gridActivos.innerHTML += `
-                    <div class="bg-surface-900 border border-white/5 rounded-2xl p-5 hover:border-white/10 transition relative group">
-                        <!-- Menú rápido (Editar/Eliminar) -->
-                        <div class="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition flex gap-1 z-20">
-                            <button onclick="editProposito(${p.id}, '${p.nombre}', ${p.monto_objetivo}, '${p.color}')" class="p-1 text-gray-400 hover:text-accent-400 bg-surface-950 rounded"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg></button>
-                            ${!p.is_default ? `<button onclick="deleteProposito(${p.id})" class="p-1 text-gray-400 hover:text-expense bg-surface-950 rounded"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>` : ''}
-                        </div>
-                        
-                        <div class="relative z-10">
-                            <div class="flex justify-between items-start mb-4 pr-16">
-                                <h3 class="font-bold text-lg text-white" style="color: ${p.color}">${p.nombre}</h3>
+                if (p.is_default || p.id === 1) {
+                    gridActivos.innerHTML += `
+                        <div class="bg-surface-900 border border-accent-500/20 rounded-2xl p-5 relative">
+                            <div class="relative z-10">
+                                <h3 class="font-bold text-lg text-white mb-2" style="color: ${p.color}">${p.nombre}</h3>
+                                <p class="text-2xl font-bold text-white mb-1">$${p.monto_actual.toFixed(2)}</p>
+                                <p class="text-xs text-gray-500 mb-6">Fondos disponibles no asignados a metas específicas.</p>
                             </div>
-                            <p class="text-2xl font-bold text-white mb-1">$${p.monto_actual.toFixed(2)}</p>
-                            <p class="text-xs text-gray-500 mb-4">de $${p.monto_objetivo.toFixed(2)} objetivo</p>
+                        </div>
+                    `;
+                } else {
+                    gridActivos.innerHTML += `
+                        <div class="bg-surface-900 border border-white/5 rounded-2xl p-5 hover:border-white/10 transition relative group">
+                            <!-- Menú rápido (Editar/Eliminar) -->
+                            <div class="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition flex gap-1 z-20">
+                                <button onclick="editProposito(${p.id}, '${p.nombre.replace(/'/g, "\\'")}', ${p.monto_objetivo}, '${p.color}')" class="p-1 text-gray-400 hover:text-accent-400 bg-surface-950 rounded"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg></button>
+                                <button onclick="deleteProposito(${p.id})" class="p-1 text-gray-400 hover:text-expense bg-surface-950 rounded"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+                            </div>
                             
-                            <div class="h-2 w-full bg-surface-800 rounded-full overflow-hidden mb-4">
-                                <div class="h-full progress-bar-inner" style="width: ${pct}%; background-color: ${p.color};"></div>
-                            </div>
-
-                            ${pct >= 100 ? `
-                                <button onclick="marcarCompletada(${p.id})" class="w-full py-2 rounded-xl bg-income hover:bg-emerald-500 text-surface-950 text-sm font-bold transition flex items-center justify-center gap-2">
-                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                                    Reclamar Logro
-                                </button>
-                            ` : `
-                                <div class="flex gap-2">
-                                    <button onclick="quickAction('ahorro', 'aporte', ${p.id})" class="flex-1 text-center py-1.5 rounded-lg bg-savings/10 hover:bg-savings/20 text-savings text-xs font-semibold transition">+ Aportar</button>
-                                    <button onclick="quickAction('ahorro', 'retiro', ${p.id})" class="flex-1 text-center py-1.5 rounded-lg border border-white/10 hover:bg-white/5 text-gray-400 text-xs font-semibold transition">- Retirar</button>
+                            <div class="relative z-10">
+                                <div class="flex justify-between items-start mb-4 pr-16">
+                                    <h3 class="font-bold text-lg text-white" style="color: ${p.color}">${p.nombre}</h3>
                                 </div>
-                            `}
+                                <p class="text-2xl font-bold text-white mb-1">$${p.monto_actual.toFixed(2)}</p>
+                                <p class="text-xs text-gray-500 mb-4">de $${p.monto_objetivo.toFixed(2)} objetivo</p>
+                                
+                                <div class="h-2 w-full bg-surface-800 rounded-full overflow-hidden mb-4">
+                                    <div class="h-full progress-bar-inner" style="width: ${pct}%; background-color: ${p.color};"></div>
+                                </div>
+
+                                ${pct >= 100 ? `
+                                    <button onclick="marcarCompletada(${p.id})" class="w-full py-2 rounded-xl bg-income hover:bg-emerald-500 text-surface-950 text-sm font-bold transition flex items-center justify-center gap-2">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                                        Reclamar Logro
+                                    </button>
+                                ` : `
+                                    <div class="flex gap-2">
+                                        <button onclick="quickAction('ahorro', 'aporte', ${p.id})" class="flex-1 text-center py-1.5 rounded-lg bg-savings/10 hover:bg-savings/20 text-savings text-xs font-semibold transition">+ Aportar</button>
+                                        <button onclick="quickAction('ahorro', 'retiro', ${p.id})" class="flex-1 text-center py-1.5 rounded-lg border border-white/10 hover:bg-white/5 text-gray-400 text-xs font-semibold transition">- Retirar</button>
+                                    </div>
+                                `}
+                            </div>
                         </div>
-                    </div>
-                `;
+                    `;
+                }
             }
         });
 

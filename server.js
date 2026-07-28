@@ -71,10 +71,10 @@ function createApp(options = {}) {
         // Inyectar propósito general por defecto
         const propositosCount = queryOne("SELECT COUNT(*) as c FROM propositos").c;
         if (propositosCount === 0) {
-            db.run("INSERT INTO propositos (nombre, monto_objetivo, color, is_default) VALUES ('Ahorro General', 9999999, '#8B5CF6', 1)");
+            db.run("INSERT INTO propositos (nombre, monto_objetivo, color, is_default) VALUES ('Liquidez Sin Asignar', 9999999, '#8B5CF6', 1)");
         } else {
-            // Asegurar que el Ahorro General esté marcado como default
-            db.run("UPDATE propositos SET is_default = 1 WHERE id = 1");
+            // Asegurar que el Ahorro General esté marcado como default y renombrado
+            db.run("UPDATE propositos SET is_default = 1, nombre = 'Liquidez Sin Asignar' WHERE id = 1");
         }
 
         saveDatabase();
@@ -130,8 +130,8 @@ function createApp(options = {}) {
             const billeteras = queryAll(`
                 SELECT b.*, 
                 (b.saldo_inicial + 
-                 COALESCE((SELECT SUM(amount) FROM transactions WHERE billetera_destino_id = b.id), 0) - 
-                 COALESCE((SELECT SUM(amount) FROM transactions WHERE billetera_origen_id = b.id), 0)
+                 COALESCE((SELECT SUM(amount) FROM transactions WHERE billetera_destino_id = b.id AND type NOT IN ('ahorro', 'retiro_ahorro')), 0) - 
+                 COALESCE((SELECT SUM(amount) FROM transactions WHERE billetera_origen_id = b.id AND type NOT IN ('ahorro', 'retiro_ahorro')), 0)
                 ) as saldo_actual
                 FROM billeteras b
                 WHERE b.activo = 1 OR b.activo IS NULL
@@ -167,6 +167,53 @@ function createApp(options = {}) {
         try {
             runSql("UPDATE billeteras SET activo = 0 WHERE id = ?", [req.params.id]);
             res.json({ success: true });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.get('/api/billeteras/:id/desglose', (req, res) => {
+        try {
+            const id = req.params.id;
+            
+            // 1. Balance total real de la billetera
+            const billetera = queryOne(`
+                SELECT b.*, 
+                (b.saldo_inicial + 
+                 COALESCE((SELECT SUM(amount) FROM transactions WHERE billetera_destino_id = b.id AND type NOT IN ('ahorro', 'retiro_ahorro')), 0) - 
+                 COALESCE((SELECT SUM(amount) FROM transactions WHERE billetera_origen_id = b.id AND type NOT IN ('ahorro', 'retiro_ahorro')), 0)
+                ) as saldo_actual
+                FROM billeteras b
+                WHERE b.id = ?
+            `, [id]);
+
+            if (!billetera) return res.status(404).json({ success: false, error: "Billetera no encontrada" });
+
+            // 2. Desglose de aportes a metas específicos procedentes de esta billetera
+            const desglose = queryAll(`
+                SELECT p.id, p.nombre, p.color,
+                (
+                    COALESCE((SELECT SUM(amount) FROM transactions WHERE proposito_id = p.id AND billetera_origen_id = ? AND type = 'ahorro'), 0) -
+                    COALESCE((SELECT SUM(amount) FROM transactions WHERE proposito_id = p.id AND billetera_destino_id = ? AND type = 'retiro_ahorro'), 0)
+                ) as asignado
+                FROM propositos p
+                WHERE p.id != 1
+                HAVING asignado > 0
+            `, [id, id]);
+
+            const totalAsignado = desglose.reduce((sum, item) => sum + item.asignado, 0);
+            
+            // 3. Lo restante es Liquidez Sin Asignar
+            const sinAsignar = Math.max(0, billetera.saldo_actual - totalAsignado);
+            
+            res.json({ 
+                success: true, 
+                data: {
+                    saldo_actual: billetera.saldo_actual,
+                    sin_asignar: sinAsignar,
+                    metas: desglose
+                } 
+            });
         } catch (error) {
             res.status(500).json({ success: false, error: error.message });
         }
