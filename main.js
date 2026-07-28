@@ -86,7 +86,7 @@ async function createWindow() {
 
         // ── Auto-updater ───────────────────────────────────────
         // Configurar log para debugging
-        autoUpdater.logger = require('electron').app;
+        autoUpdater.logger = console;
         autoUpdater.autoDownload = true;
         autoUpdater.autoInstallOnAppQuit = true;
 
