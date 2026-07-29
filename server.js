@@ -130,15 +130,15 @@ function createApp(options = {}) {
             const billeteras = queryAll(`
                 SELECT b.*, 
                 (b.saldo_inicial + 
-                 COALESCE((SELECT SUM(amount) FROM transactions WHERE billetera_destino_id = b.id AND type NOT IN ('ahorro', 'retiro_ahorro')), 0) - 
-                 COALESCE((SELECT SUM(amount) FROM transactions WHERE billetera_origen_id = b.id AND type NOT IN ('ahorro', 'retiro_ahorro')), 0)
+                 COALESCE((SELECT SUM(amount) FROM transactions WHERE billetera_destino_id = b.id AND type IN ('ingreso', 'transferencia')), 0) - 
+                 COALESCE((SELECT SUM(amount) FROM transactions WHERE billetera_origen_id = b.id AND type IN ('egreso', 'transferencia')), 0)
                 ) as saldo_actual
                 FROM billeteras b
                 WHERE b.activo = 1 OR b.activo IS NULL
             `);
             res.json({ success: true, data: billeteras });
         } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
+            console.error("MYERROR", error); res.status(500).json({ success: false, error: error.message || String(error) });
         }
     });
 
@@ -149,7 +149,7 @@ function createApp(options = {}) {
                    [nombre, saldo_inicial || 0, color || '#6B7280']);
             res.json({ success: true });
         } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
+            console.error("MYERROR", error); res.status(500).json({ success: false, error: error.message || String(error) });
         }
     });
 
@@ -159,7 +159,7 @@ function createApp(options = {}) {
             runSql("UPDATE billeteras SET nombre = ? WHERE id = ?", [nombre, req.params.id]);
             res.json({ success: true });
         } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
+            console.error("MYERROR", error); res.status(500).json({ success: false, error: error.message || String(error) });
         }
     });
 
@@ -168,7 +168,7 @@ function createApp(options = {}) {
             runSql("UPDATE billeteras SET activo = 0 WHERE id = ?", [req.params.id]);
             res.json({ success: true });
         } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
+            console.error("MYERROR", error); res.status(500).json({ success: false, error: error.message || String(error) });
         }
     });
 
@@ -180,8 +180,8 @@ function createApp(options = {}) {
             const billetera = queryOne(`
                 SELECT b.*, 
                 (b.saldo_inicial + 
-                 COALESCE((SELECT SUM(amount) FROM transactions WHERE billetera_destino_id = b.id AND type NOT IN ('ahorro', 'retiro_ahorro')), 0) - 
-                 COALESCE((SELECT SUM(amount) FROM transactions WHERE billetera_origen_id = b.id AND type NOT IN ('ahorro', 'retiro_ahorro')), 0)
+                 COALESCE((SELECT SUM(amount) FROM transactions WHERE billetera_destino_id = b.id AND type IN ('ingreso', 'transferencia')), 0) - 
+                 COALESCE((SELECT SUM(amount) FROM transactions WHERE billetera_origen_id = b.id AND type IN ('egreso', 'transferencia')), 0)
                 ) as saldo_actual
                 FROM billeteras b
                 WHERE b.id = ?
@@ -217,7 +217,7 @@ function createApp(options = {}) {
                 } 
             });
         } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
+            console.error("MYERROR", error); res.status(500).json({ success: false, error: error.message || String(error) });
         }
     });
 
@@ -234,7 +234,7 @@ function createApp(options = {}) {
             const data = propositos.map(p => ({ ...p, monto_actual: p.monto_actual_calculado }));
             res.json({ success: true, data });
         } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
+            console.error("MYERROR", error); res.status(500).json({ success: false, error: error.message || String(error) });
         }
     });
 
@@ -245,7 +245,7 @@ function createApp(options = {}) {
                    [nombre, monto_objetivo, color || '#6B7280']);
             res.json({ success: true });
         } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
+            console.error("MYERROR", error); res.status(500).json({ success: false, error: error.message || String(error) });
         }
     });
 
@@ -256,7 +256,7 @@ function createApp(options = {}) {
                    [nombre, monto_objetivo, req.params.id]);
             res.json({ success: true });
         } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
+            console.error("MYERROR", error); res.status(500).json({ success: false, error: error.message || String(error) });
         }
     });
 
@@ -272,7 +272,7 @@ function createApp(options = {}) {
             runSql("DELETE FROM propositos WHERE id = ?", [id]);
             res.json({ success: true });
         } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
+            console.error("MYERROR", error); res.status(500).json({ success: false, error: error.message || String(error) });
         }
     });
 
@@ -281,7 +281,7 @@ function createApp(options = {}) {
             runSql("UPDATE propositos SET estado = 'completado' WHERE id = ?", [req.params.id]);
             res.json({ success: true });
         } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
+            console.error("MYERROR", error); res.status(500).json({ success: false, error: error.message || String(error) });
         }
     });
 
@@ -291,7 +291,7 @@ function createApp(options = {}) {
             const evidencias = queryAll("SELECT * FROM evidencias WHERE proposito_id = ? ORDER BY created_at DESC", [req.params.id]);
             res.json({ success: true, data: evidencias });
         } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
+            console.error("MYERROR", error); res.status(500).json({ success: false, error: error.message || String(error) });
         }
     });
 
@@ -305,7 +305,7 @@ function createApp(options = {}) {
             }
             res.json({ success: true });
         } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
+            console.error("MYERROR", error); res.status(500).json({ success: false, error: error.message || String(error) });
         }
     });
 
@@ -340,13 +340,22 @@ function createApp(options = {}) {
             const transactions = queryAll(query, params);
             res.json({ success: true, data: transactions });
         } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
+            console.error("MYERROR", error); res.status(500).json({ success: false, error: error.message || String(error) });
         }
     });
 
     app.post('/api/transactions', upload.single('invoice'), (req, res) => {
         try {
-            const { type, date, description, priority, amount, note, billetera_origen_id, billetera_destino_id, proposito_id } = req.body;
+            const { type, date, description, priority, amount, note } = req.body;
+            let { billetera_origen_id, billetera_destino_id, proposito_id } = req.body;
+            
+            // Fix hidden form fields submitting irrelevant data
+            if (type === 'ingreso') { billetera_origen_id = null; proposito_id = null; }
+            if (type === 'egreso') { billetera_destino_id = null; proposito_id = null; }
+            if (type === 'transferencia') { proposito_id = null; }
+            if (type === 'ahorro') { billetera_destino_id = null; }
+            if (type === 'retiro_ahorro') { billetera_origen_id = null; }
+
             const invoice_path = req.file ? `/uploads/${req.file.filename}` : null;
 
             runSql(`INSERT INTO transactions 
@@ -356,7 +365,7 @@ function createApp(options = {}) {
             
             res.json({ success: true });
         } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
+            console.error("MYERROR", error); res.status(500).json({ success: false, error: error.message || String(error) });
         }
     });
 
@@ -381,7 +390,7 @@ function createApp(options = {}) {
             runSql(query, params);
             res.json({ success: true });
         } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
+            console.error("MYERROR", error); res.status(500).json({ success: false, error: error.message || String(error) });
         }
     });
 
@@ -396,7 +405,7 @@ function createApp(options = {}) {
             }
             res.json({ success: true });
         } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
+            console.error("MYERROR", error); res.status(500).json({ success: false, error: error.message || String(error) });
         }
     });
 
@@ -424,7 +433,7 @@ function createApp(options = {}) {
                 }
             });
         } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
+            console.error("MYERROR", error); res.status(500).json({ success: false, error: error.message || String(error) });
         }
     });
 
@@ -443,7 +452,7 @@ function createApp(options = {}) {
             const data = rows.map(r => ({ ...r, balance: r.ingresos - r.egresos }));
             res.json({ success: true, data });
         } catch (error) {
-            res.status(500).json({ success: false, error: error.message });
+            console.error("MYERROR", error); res.status(500).json({ success: false, error: error.message || String(error) });
         }
     });
 
