@@ -190,7 +190,7 @@ function createApp(options = {}) {
             if (!billetera) return res.status(404).json({ success: false, error: "Billetera no encontrada" });
 
             // 2. Desglose de aportes a metas específicos procedentes de esta billetera
-            const desglose = queryAll(`
+            let desglose = queryAll(`
                 SELECT p.id, p.nombre, p.color,
                 (
                     COALESCE((SELECT SUM(amount) FROM transactions WHERE proposito_id = p.id AND billetera_origen_id = ? AND type = 'ahorro'), 0) -
@@ -198,8 +198,10 @@ function createApp(options = {}) {
                 ) as asignado
                 FROM propositos p
                 WHERE p.id != 1
-                HAVING asignado > 0
             `, [id, id]);
+
+            // Filtrar en JS para evitar errores de HAVING sin GROUP BY en SQLite
+            desglose = desglose.filter(item => item.asignado > 0);
 
             const totalAsignado = desglose.reduce((sum, item) => sum + item.asignado, 0);
             
